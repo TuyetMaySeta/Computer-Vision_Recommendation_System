@@ -1,0 +1,216 @@
+"""
+Module để tạo embeddings cho video content
+Sử dụng OpenAI text-embedding-3-small
+"""
+
+import openai
+import numpy as np
+import time
+from typing import List, Dict, Optional
+from config.settings import OPENAI_API_KEY
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+class EmbeddingGenerator:
+    def __init__(self, model="text-embedding-3-small", batch_size=100):
+        """
+        Khởi tạo embedding generator
+        
+        Args:
+            model: OpenAI embedding model
+            batch_size: Số lượng text xử lý mỗi batch
+        """
+        self.model = model
+        self.batch_size = batch_size
+        self.dimension = 1536 if model == "text-embedding-3-small" else 1536
+        openai.api_key = OPENAI_API_KEY
+        
+        self.total_tokens = 0
+        self.total_requests = 0
+    
+    def clean_text(self, text: str) -> str:
+        """
+        Làm sạch text trước khi tạo embedding
+        
+        Args:
+            text: Raw text
+            
+        Returns:
+            Cleaned text
+        """
+        if not text:
+            return ""
+        
+        # Xóa ký tự đặc biệt
+        import re
+        text = re.sub(r'[^\w\s\-.,!?]', ' ', text)
+        
+        # Chuẩn hóa khoảng trắng
+        text = ' '.join(text.split())
+        
+        # Giới hạn độ dài (max 8000 tokens ~= 32000 chars)
+        if len(text) > 32000:
+            text = text[:32000]
+        
+        return text
+    
+    def combine_video_text(self, video_data: Dict) -> str:
+        """
+        Kết hợp title, description và transcript thành một văn bản
+        
+        Args:
+            video_data: Dictionary chứa thông tin video
+            
+        Returns:
+            Combined text
+        """
+        # Lấy các thành phần
+        title = video_data.get('title', '')
+        description = video_data.get('description', '')
+        transcript = video_data.get('transcript_text', '')
+        
+        # Tạo văn bản tổng hợp với trọng số
+        # Title quan trọng nhất (x3), description (x2), transcript (x1)
+        combined = f"{title} {title} {title}. {description} {description}. "
+        
+        # Thêm transcript nhưng giới hạn độ dài
+        if transcript:
+            # Cắt transcript nếu quá dài
+            max_transcript_length = 8000
+            if len(transcript) > max_transcript_length:
+                transcript = transcript[:max_transcript_length]
+            combined += transcript
+        
+        return self.clean_text(combined)
+    
+    def create_embedding(self, text: str, retry=3) -> Optional[np.ndarray]:
+        """
+        Tạo embedding cho một đoạn text
+        
+        Args:
+            text: Input text
+            retry: Số lần retry nếu lỗi
+            
+        Returns:
+            Embedding vector hoặc None nếu lỗi
+        """
+        if not text or not text.strip():
+            logger.warning("Empty text provided for embedding")
+            return None
+        
+        for attempt in range(retry):
+            try:
+                response = openai.embeddings.create(
+                    model=self.model,
+                    input=text
+                )
+                
+                # Lấy embedding vector
+                embedding = response.data[0].embedding
+                
+                # Update statistics
+                self.total_tokens += response.usage.total_tokens
+                self.total_requests += 1
+                
+                return np.array(embedding, dtype=np.float32)
+                
+            except openai.RateLimitError:
+                wait_time = (attempt + 1) * 5
+                logger.warning(f"Rate limit hit. Waiting {wait_time}s...")
+                time.sleep(wait_time)
+                
+            except openai.APIError as e:
+                logger.error(f"OpenAI API error: {e}")
+                if attempt < retry - 1:
+                    time.sleep(2)
+                else:
+                    return None
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error creating embedding: {e}")
+                return None
+        
+        return None
+    
+    def create_embeddings_batch(self, texts: List[str]) -> List[Optional[np.ndarray]]:
+        """
+        Tạo embeddings cho một batch texts
+        
+        Args:
+            texts: List of texts
+            
+        Returns:
+            List of embedding vectors
+        """
+        embeddings = []
+        
+        for i in range(0, len(texts), self.batch_size):
+            batch = texts[i:i + self.batch_size]
+            batch_embeddings = []
+            
+            for text in batch:
+                embedding = self.create_embedding(text)
+                batch_embeddings.append(embedding)
+                
+                # Delay nhỏ để tránh rate limit
+                time.sleep(0.1)
+            
+            embeddings.extend(batch_embeddings)
+            
+            # Log progress
+            logger.info(f"Processed {min(i + self.batch_size, len(texts))}/{len(texts)} embeddings")
+        
+        return embeddings
+    
+    def process_videos(self, videos_data: List[Dict]) -> List[Dict]:
+        """
+        Xử lý danh sách videos và tạo embeddings
+        
+        Args:
+            videos_data: List of video dictionaries
+            
+        Returns:
+            List of videos with embeddings added
+        """
+        logger.info(f"Processing {len(videos_data)} videos for embeddings...")
+        
+        results = []
+        success_count = 0
+        fail_count = 0
+        
+        for i, video in enumerate(videos_data):
+            # Kết hợp text
+            combined_text = self.combine_video_text(video)
+            
+            # Tạo embedding
+            embedding = self.create_embedding(combined_text)
+            
+            if embedding is not None:
+                video['embedding'] = embedding
+                video['full_text'] = combined_text
+                success_count += 1
+            else:
+                fail_count += 1
+                logger.warning(f"Failed to create embedding for video: {video.get('video_id')}")
+            
+            results.append(video)
+            
+            # Log progress every 50 videos
+            if (i + 1) % 50 == 0:
+                logger.info(f"Progress: {i + 1}/{len(videos_data)} videos")
+        
+        logger.info(f"Embedding generation complete. Success: {success_count}, Failed: {fail_count}")
+        logger.info(f"Total tokens used: {self.total_tokens:,}")
+        logger.info(f"Estimated cost: ${self.total_tokens * 0.00002:.4f}")
+        
+        return results
+    
+    def get_stats(self) -> Dict:
+        """Lấy thống kê"""
+        return {
+            'total_requests': self.total_requests,
+            'total_tokens': self.total_tokens,
+            'estimated_cost': self.total_tokens * 0.00002,  # $0.02 per 1M tokens
+            'model': self.model
+        }
