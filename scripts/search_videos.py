@@ -118,24 +118,61 @@ def search_videos(query_text=None, file_path=None, top_k=5):
 
 def display_results(results):
     """
-    Hiển thị kết quả tìm kiếm
+    Hiển thị kết quả tìm kiếm với metrics chi tiết
     
     Args:
         results: List of recommended videos
     """
-    print("\n" + "=" * 80)
-    print("🎥 TOP RECOMMENDED VIDEOS")
-    print("=" * 80)
+    import numpy as np
+    from datetime import datetime
     
+    print("\n" + "=" * 100)
+    print("🎥 TOP RECOMMENDED VIDEOS")
+    print("=" * 100)
+    
+    # Display each result
     for video in results:
         print(f"\n{video['rank']}. {video['title']}")
         print(f"   👤 {video['channel']} | 👁️  {video['view_count']} views | ⏱️  {video['duration']}")
-        print(f"   📅 {video['published_date']} | 🎯 Match: {video['similarity_score']:.1%}")
+        print(f"   📅 {video['published_date']} | 🎯 Similarity: {video['similarity_score']:.3f} | ⭐ Final: {video['final_score']:.3f}")
         print(f"   🔗 {video['url']}")
         print(f"   📝 {video['why_relevant']}")
-        print(f"   💡 {video['summary'][:150]}...")
+        print(f"   💡 {video['summary'][:120]}...")
     
-    print("\n" + "=" * 80)
+    # Calculate metrics
+    print("\n" + "=" * 100)
+    print("📊 RECOMMENDATION METRICS")
+    print("=" * 100)
+    
+    similarity_scores = [v['similarity_score'] for v in results]
+    
+    print(f"\n🎯 Similarity Analysis:")
+    print(f"   Mean:       {np.mean(similarity_scores):.4f}")
+    print(f"   Median:     {np.median(similarity_scores):.4f}")
+    print(f"   Range:      [{np.min(similarity_scores):.4f}, {np.max(similarity_scores):.4f}]")
+    
+    # Score distribution
+    high_sim = sum(1 for s in similarity_scores if s >= 0.7)
+    med_sim = sum(1 for s in similarity_scores if 0.5 <= s < 0.7)
+    low_sim = sum(1 for s in similarity_scores if s < 0.5)
+    
+    print(f"\n   Distribution:")
+    print(f"   ├─ High (≥0.7):      {high_sim}/{len(results)} ({high_sim/len(results)*100:.1f}%)")
+    print(f"   ├─ Medium (0.5-0.7): {med_sim}/{len(results)} ({med_sim/len(results)*100:.1f}%)")
+    print(f"   └─ Low (<0.5):       {low_sim}/{len(results)} ({low_sim/len(results)*100:.1f}%)")
+    
+    # Diversity
+    channels = [v['channel'] for v in results]
+    unique_channels = len(set(channels))
+    
+    print(f"\n🌈 Diversity:")
+    print(f"   Unique Channels: {unique_channels}/{len(results)} ({unique_channels/len(results)*100:.0f}%)")
+    
+    # Quality score
+    quality = np.mean(similarity_scores) * 100
+    print(f"\n🏆 Overall Quality Score: {quality:.1f}/100")
+    
+    print("\n" + "=" * 100)
 
 def save_results(results, output_file='search_results.json'):
     """
