@@ -26,6 +26,11 @@ DB_CONFIG = {
 EMBEDDINGS_STORAGE_PATH = os.getenv('EMBEDDINGS_STORAGE_PATH', 'data/embeddings/videos_embeddings.pkl')
 EMBEDDINGS_PARQUET_PATH = os.getenv('EMBEDDINGS_PARQUET_PATH', 'data/embeddings/videos_embeddings.parquet')
 
+# Thêm vào cuối file config/settings.py
+# Embedding Settings
+USE_LOCAL_EMBEDDINGS = os.getenv('USE_LOCAL_EMBEDDINGS', 'true').lower() == 'true'
+LOCAL_EMBEDDING_MODEL = os.getenv('LOCAL_EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
+
 # Collection Settings
 MAX_RESULTS_PER_QUERY = int(os.getenv('MAX_RESULTS_PER_QUERY', 50))
 MAX_VIDEOS_PER_KEYWORD = int(os.getenv('MAX_VIDEOS_PER_KEYWORD', 100))

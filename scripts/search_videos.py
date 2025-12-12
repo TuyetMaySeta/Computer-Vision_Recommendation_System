@@ -18,11 +18,8 @@ from utils.logger import get_logger
 
 
 # Chọn embedding generator dựa trên config
-from config.settings import USE_LOCAL_EMBEDDINGS
-if USE_LOCAL_EMBEDDINGS:
-    from processors.embeddings_local import EmbeddingGenerator
-else:
-    from processors.embeddings import EmbeddingGenerator
+# Luôn dùng local embeddings (miễn phí)
+from processors.embeddings import EmbeddingGenerator
 logger = get_logger(__name__)
 
 def search_videos(query_text=None, file_path=None, top_k=5):

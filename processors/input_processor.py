@@ -44,17 +44,15 @@ class InputProcessor:
         return text
     
     def extract_pdf_text(self, pdf_path: str) -> Tuple[Optional[str], Optional[Dict]]:
-        """
-        Trích xuất text từ PDF
-        
-        Args:
-            pdf_path: Đường dẫn đến file PDF
-            
-        Returns:
-            Tuple (extracted_text, metadata)
-        """
+    
+        doc = None
         try:
             import os
+            
+            # Kiểm tra file có tồn tại không
+            if not os.path.exists(pdf_path):
+                logger.error(f"PDF file not found: {pdf_path}")
+                return None, None
             
             # Kiểm tra file size
             file_size = os.path.getsize(pdf_path)
@@ -66,35 +64,54 @@ class InputProcessor:
             doc = fitz.open(pdf_path)
             
             # Kiểm tra số trang
-            if len(doc) > self.max_pages:
-                logger.warning(f"PDF has {len(doc)} pages, limiting to {self.max_pages}")
+            page_count = len(doc)
+            if page_count > self.max_pages:
+                logger.warning(f"PDF has {page_count} pages, limiting to {self.max_pages}")
             
             # Trích xuất metadata
             metadata = {
-                'page_count': len(doc),
-                'title': doc.metadata.get('title', ''),
-                'author': doc.metadata.get('author', ''),
-                'keywords': doc.metadata.get('keywords', '')
+                'page_count': page_count,
+                'title': doc.metadata.get('title', '') if doc.metadata else '',
+                'author': doc.metadata.get('author', '') if doc.metadata else '',
+                'keywords': doc.metadata.get('keywords', '') if doc.metadata else ''
             }
             
             # Trích xuất text từ mỗi trang
             all_text = []
-            for page_num in range(min(len(doc), self.max_pages)):
-                page = doc[page_num]
-                text = page.get_text()
-                all_text.append(text)
+            pages_to_process = min(page_count, self.max_pages)
             
-            doc.close()
+            for page_num in range(pages_to_process):
+                try:
+                    page = doc[page_num]
+                    text = page.get_text()
+                    if text and text.strip():
+                        all_text.append(text)
+                except Exception as e:
+                    logger.warning(f"Error extracting text from page {page_num}: {e}")
+                    continue
             
             # Ghép text
             full_text = '\n'.join(all_text)
             
-            logger.info(f"Extracted {len(full_text)} characters from PDF ({len(doc)} pages)")
+            if not full_text or not full_text.strip():
+                logger.error("No text extracted from PDF - might be a scanned image")
+                return None, None
+            
+            logger.info(f"Extracted {len(full_text)} characters from PDF ({page_count} pages)")
+            
             return full_text, metadata
             
         except Exception as e:
             logger.error(f"Error extracting PDF text: {e}")
             return None, None
+        
+        finally:
+            # Đảm bảo đóng document
+            if doc is not None:
+                try:
+                    doc.close()
+                except:
+                    pass
     
     def extract_word_text(self, docx_path: str) -> Tuple[Optional[str], Optional[Dict]]:
         """
