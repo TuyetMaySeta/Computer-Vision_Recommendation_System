@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Main script để tìm kiếm video dựa trên text query và/hoặc file
+Main script để tìm kiếm video dựa trên text query, image và/hoặc file
+UPDATED: Hỗ trợ xử lý ảnh với OCR
 """
 
 import sys
@@ -8,26 +9,23 @@ import os
 import argparse
 import json
 
-# Thêm thư mục gốc vào Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from processors.input_processor import InputProcessor
+from processors.image_processor import MultimodalProcessor
 from processors.similarity import SimilarityCalculator
 from database.embeddings_store import EmbeddingsStore
+from processors.embeddings import EmbeddingGenerator
 from utils.logger import get_logger
 
-
-# Chọn embedding generator dựa trên config
-# Luôn dùng local embeddings (miễn phí)
-from processors.embeddings import EmbeddingGenerator
 logger = get_logger(__name__)
 
-def search_videos(query_text=None, file_path=None, top_k=5):
+def search_videos(query_text=None, image_path=None, file_path=None, top_k=5):
     """
-    Tìm kiếm video dựa trên query và/hoặc file
+    Tìm kiếm video dựa trên query, image và/hoặc file
     
     Args:
         query_text: Text query từ user
+        image_path: Đường dẫn file ảnh (JPG, PNG, etc.)
         file_path: Đường dẫn file PDF/Word
         top_k: Số lượng kết quả trả về
         
@@ -35,40 +33,37 @@ def search_videos(query_text=None, file_path=None, top_k=5):
         List of recommended videos
     """
     logger.info("=" * 60)
-    logger.info("YOUTUBE VIDEO RECOMMENDATION SYSTEM")
+    logger.info("YOUTUBE VIDEO RECOMMENDATION SYSTEM (MULTIMODAL)")
     logger.info("=" * 60)
     
     # Validate input
-    if not query_text and not file_path:
-        logger.error("Must provide either query_text or file_path")
+    if not query_text and not image_path and not file_path:
+        logger.error("Must provide at least one input: query_text, image_path, or file_path")
         return None
     
-    # 1. Xử lý input
-    logger.info("\n[Step 1/4] Processing input...")
-    input_processor = InputProcessor()
+    # 1. Xử lý multimodal input
+    logger.info("\n[Step 1/4] Processing multimodal input...")
     
-    # Xác định file type
-    file_type = None
+    if image_path:
+        logger.info(f"   📷 Image: {image_path}")
     if file_path:
-        if file_path.endswith('.pdf'):
-            file_type = 'pdf'
-        elif file_path.endswith('.docx') or file_path.endswith('.doc'):
-            file_type = 'word'
-        else:
-            logger.error(f"Unsupported file type: {file_path}")
-            return None
+        logger.info(f"   📄 Document: {file_path}")
+    if query_text:
+        logger.info(f"   💬 Query: {query_text}")
     
-    processed_text = input_processor.process_input(
-        query_text=query_text,
-        file_path=file_path,
-        file_type=file_type
+    multimodal_processor = MultimodalProcessor()
+    
+    processed_text = multimodal_processor.process_multimodal_input(
+        text_query=query_text,
+        image_path=image_path,
+        pdf_path=file_path
     )
     
     if not processed_text:
         logger.error("Failed to process input")
         return None
     
-    logger.info(f"Processed input: {len(processed_text)} characters")
+    logger.info(f"✅ Processed input: {len(processed_text)} characters")
     
     # 2. Tạo embedding cho query
     logger.info("\n[Step 2/4] Creating query embedding...")
@@ -80,7 +75,7 @@ def search_videos(query_text=None, file_path=None, top_k=5):
         logger.error("Failed to create query embedding")
         return None
     
-    logger.info(f"Query embedding created: shape {query_embedding.shape}")
+    logger.info(f"✅ Query embedding created: shape {query_embedding.shape}")
     
     # 3. Load video embeddings database
     logger.info("\n[Step 3/4] Loading video database...")
@@ -92,7 +87,7 @@ def search_videos(query_text=None, file_path=None, top_k=5):
         logger.error("No videos in database. Please run data collection first.")
         return None
     
-    logger.info(f"Loaded {len(videos)} videos from database")
+    logger.info(f"✅ Loaded {len(videos)} videos from database")
     
     # 4. Tính similarity và rank
     logger.info("\n[Step 4/4] Ranking videos...")
@@ -111,26 +106,19 @@ def search_videos(query_text=None, file_path=None, top_k=5):
     # Format results
     formatted_results = similarity_calc.format_results(
         top_videos, 
-        query_text or "uploaded document"
+        query_text or "multimodal query"
     )
     
     return formatted_results
 
 def display_results(results):
-    """
-    Hiển thị kết quả tìm kiếm với metrics chi tiết
-    
-    Args:
-        results: List of recommended videos
-    """
+    """Hiển thị kết quả với metrics"""
     import numpy as np
-    from datetime import datetime
     
     print("\n" + "=" * 100)
     print("🎥 TOP RECOMMENDED VIDEOS")
     print("=" * 100)
     
-    # Display each result
     for video in results:
         print(f"\n{video['rank']}. {video['title']}")
         print(f"   👤 {video['channel']} | 👁️  {video['view_count']} views | ⏱️  {video['duration']}")
@@ -139,7 +127,7 @@ def display_results(results):
         print(f"   📝 {video['why_relevant']}")
         print(f"   💡 {video['summary'][:120]}...")
     
-    # Calculate metrics
+    # Metrics
     print("\n" + "=" * 100)
     print("📊 RECOMMENDATION METRICS")
     print("=" * 100)
@@ -151,7 +139,6 @@ def display_results(results):
     print(f"   Median:     {np.median(similarity_scores):.4f}")
     print(f"   Range:      [{np.min(similarity_scores):.4f}, {np.max(similarity_scores):.4f}]")
     
-    # Score distribution
     high_sim = sum(1 for s in similarity_scores if s >= 0.7)
     med_sim = sum(1 for s in similarity_scores if 0.5 <= s < 0.7)
     low_sim = sum(1 for s in similarity_scores if s < 0.5)
@@ -161,31 +148,22 @@ def display_results(results):
     print(f"   ├─ Medium (0.5-0.7): {med_sim}/{len(results)} ({med_sim/len(results)*100:.1f}%)")
     print(f"   └─ Low (<0.5):       {low_sim}/{len(results)} ({low_sim/len(results)*100:.1f}%)")
     
-    # Diversity
     channels = [v['channel'] for v in results]
     unique_channels = len(set(channels))
     
     print(f"\n🌈 Diversity:")
     print(f"   Unique Channels: {unique_channels}/{len(results)} ({unique_channels/len(results)*100:.0f}%)")
     
-    # Quality score
     quality = np.mean(similarity_scores) * 100
     print(f"\n🏆 Overall Quality Score: {quality:.1f}/100")
     
     print("\n" + "=" * 100)
 
 def save_results(results, output_file='search_results.json'):
-    """
-    Lưu kết quả ra file JSON
-    
-    Args:
-        results: List of recommended videos
-        output_file: Output file path
-    """
+    """Lưu kết quả ra JSON"""
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
-        
         logger.info(f"Results saved to: {output_file}")
         return True
     except Exception as e:
@@ -195,13 +173,19 @@ def save_results(results, output_file='search_results.json'):
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(
-        description='Search YouTube videos based on text query and/or document'
+        description='Search YouTube videos using text, images, and/or documents'
     )
     
     parser.add_argument(
         '-q', '--query',
         type=str,
         help='Text query (e.g., "transformer architecture")'
+    )
+    
+    parser.add_argument(
+        '-i', '--image',
+        type=str,
+        help='Path to image file (JPG, PNG, etc.)'
     )
     
     parser.add_argument(
@@ -226,13 +210,14 @@ def main():
     args = parser.parse_args()
     
     # Validate arguments
-    if not args.query and not args.file:
-        parser.error("Must provide either --query or --file (or both)")
+    if not args.query and not args.image and not args.file:
+        parser.error("Must provide at least one of: --query, --image, or --file")
     
     try:
         # Search videos
         results = search_videos(
             query_text=args.query,
+            image_path=args.image,
             file_path=args.file,
             top_k=args.top_k
         )
@@ -244,7 +229,7 @@ def main():
         # Display results
         display_results(results)
         
-        # Save results if output file specified
+        # Save results
         if args.output:
             save_results(results, args.output)
         
