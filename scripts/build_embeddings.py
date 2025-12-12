@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Script để build embeddings database từ videos đã thu thập
+UPDATED: Không yêu cầu transcript - dùng title + description
 """
 
 import sys
@@ -20,6 +21,7 @@ logger = get_logger(__name__)
 def load_videos_from_db():
     """
     Load tất cả videos từ PostgreSQL database
+    UPDATED: Không yêu cầu transcript
     
     Returns:
         List of video dictionaries
@@ -29,10 +31,10 @@ def load_videos_from_db():
     query = """
     SELECT 
         video_id, title, description, channel_name, channel_id,
-        published_date, view_count, like_count, duration, 
+        published_date, view_count, like_count, duration, tags,
         transcript_text, video_url, thumbnail_url
     FROM videos
-    WHERE transcript_text IS NOT NULL
+    WHERE title IS NOT NULL AND title != ''
     ORDER BY published_date DESC
     """
     
@@ -41,7 +43,14 @@ def load_videos_from_db():
     # Convert to list of dicts
     videos_list = [dict(v) for v in videos]
     
-    logger.info(f"Loaded {len(videos_list)} videos with transcripts")
+    # Thống kê
+    with_transcript = sum(1 for v in videos_list if v.get('transcript_text'))
+    without_transcript = len(videos_list) - with_transcript
+    
+    logger.info(f"Loaded {len(videos_list)} videos from database")
+    logger.info(f"  - With transcript: {with_transcript}")
+    logger.info(f"  - Without transcript: {without_transcript} (will use title + description)")
+    
     return videos_list
 
 def build_embeddings(batch_size=50):
@@ -61,11 +70,16 @@ def build_embeddings(batch_size=50):
     
     if not videos:
         logger.error("No videos found in database")
+        logger.error("Please run data collection first:")
+        logger.error("  python scripts/collect_by_keyword.py")
+        logger.error("  OR")
+        logger.error("  python scripts/collect_by_channel.py")
         return False
     
     # 2. Tạo embeddings
     logger.info(f"\n[Step 2/3] Creating embeddings for {len(videos)} videos...")
     logger.info(f"Processing in batches of {batch_size}...")
+    logger.info("Note: Using title + description (transcript not required)")
     
     embedding_generator = EmbeddingGenerator(batch_size=batch_size)
     
@@ -86,6 +100,10 @@ def build_embeddings(batch_size=50):
     
     logger.info(f"\nTotal embeddings created: {len(videos_with_embeddings)}/{len(videos)}")
     
+    if len(videos_with_embeddings) == 0:
+        logger.error("No embeddings were created successfully!")
+        return False
+    
     # 3. Lưu embeddings
     logger.info("\n[Step 3/3] Saving embeddings to storage...")
     embeddings_store = EmbeddingsStore()
@@ -105,9 +123,8 @@ def build_embeddings(batch_size=50):
         logger.info("EMBEDDING STATISTICS")
         logger.info("=" * 60)
         logger.info(f"Total requests: {stats['total_requests']:,}")
-        logger.info(f"Total tokens: {stats['total_tokens']:,}")
-        logger.info(f"Estimated cost: ${stats['estimated_cost']:.4f}")
         logger.info(f"Model: {stats['model']}")
+        logger.info(f"Cost: $0.00 (FREE - running locally!)")
         logger.info("=" * 60)
         
         # Display storage stats
@@ -122,6 +139,8 @@ def build_embeddings(batch_size=50):
         for channel, count in list(storage_stats['top_channels'].items())[:5]:
             logger.info(f"  - {channel}: {count} videos")
         logger.info("=" * 60)
+        logger.info("\n✅ System ready! You can now search videos:")
+        logger.info("   python scripts/search_videos.py -q \"your query here\"")
         
         return True
     else:

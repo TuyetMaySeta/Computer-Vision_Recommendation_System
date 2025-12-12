@@ -58,6 +58,7 @@ class EmbeddingGenerator:
     def combine_video_text(self, video_data: Dict) -> str:
         """
         Kết hợp title, description và transcript thành một văn bản
+        UPDATED: Ưu tiên title + description nếu không có transcript
         
         Args:
             video_data: Dictionary chứa thông tin video
@@ -69,19 +70,44 @@ class EmbeddingGenerator:
         title = video_data.get('title', '')
         description = video_data.get('description', '')
         transcript = video_data.get('transcript_text', '')
+        tags = video_data.get('tags', [])
+        channel_name = video_data.get('channel_name', '')
         
-        # Tạo văn bản tổng hợp với trọng số
-        # Title quan trọng nhất (x3), description (x2), transcript (x1)
-        combined = f"{title} {title} {title}. {description} {description}. "
+        # Strategy: Title (×3) + Tags (×2) + Description (×2) + Transcript (×1)
+        combined_parts = []
         
-        # Thêm transcript nhưng giới hạn độ dài
+        # Title là quan trọng nhất
+        if title:
+            combined_parts.extend([title] * 3)
+        
+        # Tags (nếu có)
+        if tags and isinstance(tags, list):
+            tags_text = ' '.join(tags[:10])  # Top 10 tags
+            combined_parts.extend([tags_text] * 2)
+        
+        # Description
+        if description:
+            # Lấy 1000 ký tự đầu của description
+            desc_text = description[:1000]
+            combined_parts.extend([desc_text] * 2)
+        
+        # Channel name (để tăng relevance với channel chất lượng)
+        if channel_name:
+            combined_parts.append(channel_name)
+        
+        # Transcript (nếu có)
         if transcript:
-            # Cắt transcript nếu quá dài (model chỉ xử lý ~512 tokens)
-            max_transcript_length = 3000
+            # Cắt transcript nếu quá dài
+            max_transcript_length = 2000
             if len(transcript) > max_transcript_length:
                 transcript = transcript[:max_transcript_length]
-            combined += transcript
+            combined_parts.append(transcript)
         
+        # Nếu không có gì cả, ít nhất có title
+        if not combined_parts and title:
+            combined_parts = [title]
+        
+        combined = ' '.join(combined_parts)
         return self.clean_text(combined)
     
     def create_embedding(self, text: str) -> Optional[np.ndarray]:
@@ -154,6 +180,7 @@ class EmbeddingGenerator:
     def process_videos(self, videos_data: List[Dict]) -> List[Dict]:
         """
         Xử lý danh sách videos và tạo embeddings
+        UPDATED: Hoạt động tốt ngay cả khi không có transcript
         
         Args:
             videos_data: List of video dictionaries
@@ -162,6 +189,13 @@ class EmbeddingGenerator:
             List of videos with embeddings added
         """
         logger.info(f"Processing {len(videos_data)} videos for embeddings...")
+        
+        # Thống kê
+        with_transcript = sum(1 for v in videos_data if v.get('transcript_text'))
+        without_transcript = len(videos_data) - with_transcript
+        
+        logger.info(f"Videos with transcript: {with_transcript}")
+        logger.info(f"Videos without transcript: {without_transcript} (will use title + description)")
         
         # Chuẩn bị texts
         texts = []
@@ -182,6 +216,10 @@ class EmbeddingGenerator:
             if embedding is not None:
                 video['embedding'] = embedding
                 video['full_text'] = text
+                # Tạo summary từ description nếu có
+                if not video.get('summary'):
+                    desc = video.get('description', '')
+                    video['summary'] = desc[:300] + '...' if len(desc) > 300 else desc
                 success_count += 1
             else:
                 fail_count += 1
