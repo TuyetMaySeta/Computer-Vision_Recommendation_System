@@ -1,33 +1,33 @@
 """
 Module để tạo embeddings cho video content
-Sử dụng OpenAI text-embedding-3-small
+Sử dụng Sentence Transformers (MIỄN PHÍ, chạy local)
 """
 
-import openai
+from sentence_transformers import SentenceTransformer
 import numpy as np
 import time
 from typing import List, Dict, Optional
-from config.settings import OPENAI_API_KEY
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 class EmbeddingGenerator:
-    def __init__(self, model="text-embedding-3-small", batch_size=100):
+    def __init__(self, model_name="all-MiniLM-L6-v2", batch_size=32):
         """
-        Khởi tạo embedding generator
+        Khởi tạo embedding generator với Sentence Transformers
         
         Args:
-            model: OpenAI embedding model
+            model_name: Model name (all-MiniLM-L6-v2 là nhẹ và nhanh)
             batch_size: Số lượng text xử lý mỗi batch
         """
-        self.model = model
+        logger.info(f"Loading model: {model_name}...")
+        self.model = SentenceTransformer(model_name)
+        self.model_name = model_name
         self.batch_size = batch_size
-        self.dimension = 1536 if model == "text-embedding-3-small" else 1536
-        openai.api_key = OPENAI_API_KEY
+        self.dimension = 384  # all-MiniLM-L6-v2 outputs 384-dim vectors
         
-        self.total_tokens = 0
         self.total_requests = 0
+        logger.info(f"Model loaded successfully! Embedding dimension: {self.dimension}")
     
     def clean_text(self, text: str) -> str:
         """
@@ -49,9 +49,9 @@ class EmbeddingGenerator:
         # Chuẩn hóa khoảng trắng
         text = ' '.join(text.split())
         
-        # Giới hạn độ dài (max 8000 tokens ~= 32000 chars)
-        if len(text) > 32000:
-            text = text[:32000]
+        # Giới hạn độ dài (model có giới hạn ~512 tokens)
+        if len(text) > 5000:
+            text = text[:5000]
         
         return text
     
@@ -76,21 +76,20 @@ class EmbeddingGenerator:
         
         # Thêm transcript nhưng giới hạn độ dài
         if transcript:
-            # Cắt transcript nếu quá dài
-            max_transcript_length = 8000
+            # Cắt transcript nếu quá dài (model chỉ xử lý ~512 tokens)
+            max_transcript_length = 3000
             if len(transcript) > max_transcript_length:
                 transcript = transcript[:max_transcript_length]
             combined += transcript
         
         return self.clean_text(combined)
     
-    def create_embedding(self, text: str, retry=3) -> Optional[np.ndarray]:
+    def create_embedding(self, text: str) -> Optional[np.ndarray]:
         """
         Tạo embedding cho một đoạn text
         
         Args:
             text: Input text
-            retry: Số lần retry nếu lỗi
             
         Returns:
             Embedding vector hoặc None nếu lỗi
@@ -99,39 +98,22 @@ class EmbeddingGenerator:
             logger.warning("Empty text provided for embedding")
             return None
         
-        for attempt in range(retry):
-            try:
-                response = openai.embeddings.create(
-                    model=self.model,
-                    input=text
-                )
-                
-                # Lấy embedding vector
-                embedding = response.data[0].embedding
-                
-                # Update statistics
-                self.total_tokens += response.usage.total_tokens
-                self.total_requests += 1
-                
-                return np.array(embedding, dtype=np.float32)
-                
-            except openai.RateLimitError:
-                wait_time = (attempt + 1) * 5
-                logger.warning(f"Rate limit hit. Waiting {wait_time}s...")
-                time.sleep(wait_time)
-                
-            except openai.APIError as e:
-                logger.error(f"OpenAI API error: {e}")
-                if attempt < retry - 1:
-                    time.sleep(2)
-                else:
-                    return None
-                    
-            except Exception as e:
-                logger.error(f"Unexpected error creating embedding: {e}")
-                return None
-        
-        return None
+        try:
+            # Tạo embedding
+            embedding = self.model.encode(
+                text,
+                convert_to_numpy=True,
+                show_progress_bar=False,
+                normalize_embeddings=True  # Normalize để tính cosine similarity nhanh hơn
+            )
+            
+            self.total_requests += 1
+            
+            return embedding.astype(np.float32)
+            
+        except Exception as e:
+            logger.error(f"Error creating embedding: {e}")
+            return None
     
     def create_embeddings_batch(self, texts: List[str]) -> List[Optional[np.ndarray]]:
         """
@@ -145,21 +127,27 @@ class EmbeddingGenerator:
         """
         embeddings = []
         
-        for i in range(0, len(texts), self.batch_size):
-            batch = texts[i:i + self.batch_size]
-            batch_embeddings = []
+        try:
+            # Sentence Transformers có thể xử lý batch hiệu quả
+            batch_embeddings = self.model.encode(
+                texts,
+                batch_size=self.batch_size,
+                convert_to_numpy=True,
+                show_progress_bar=True,
+                normalize_embeddings=True
+            )
             
-            for text in batch:
+            self.total_requests += len(texts)
+            
+            # Convert to list of arrays
+            embeddings = [emb.astype(np.float32) for emb in batch_embeddings]
+            
+        except Exception as e:
+            logger.error(f"Error creating batch embeddings: {e}")
+            # Fallback to individual processing
+            for text in texts:
                 embedding = self.create_embedding(text)
-                batch_embeddings.append(embedding)
-                
-                # Delay nhỏ để tránh rate limit
-                time.sleep(0.1)
-            
-            embeddings.extend(batch_embeddings)
-            
-            # Log progress
-            logger.info(f"Processed {min(i + self.batch_size, len(texts))}/{len(texts)} embeddings")
+                embeddings.append(embedding)
         
         return embeddings
     
@@ -175,34 +163,33 @@ class EmbeddingGenerator:
         """
         logger.info(f"Processing {len(videos_data)} videos for embeddings...")
         
+        # Chuẩn bị texts
+        texts = []
+        for video in videos_data:
+            combined_text = self.combine_video_text(video)
+            texts.append(combined_text)
+        
+        # Tạo embeddings batch (nhanh hơn nhiều)
+        logger.info("Creating embeddings (this may take a few minutes)...")
+        embeddings = self.create_embeddings_batch(texts)
+        
+        # Gắn embeddings vào videos
         results = []
         success_count = 0
         fail_count = 0
         
-        for i, video in enumerate(videos_data):
-            # Kết hợp text
-            combined_text = self.combine_video_text(video)
-            
-            # Tạo embedding
-            embedding = self.create_embedding(combined_text)
-            
+        for i, (video, embedding, text) in enumerate(zip(videos_data, embeddings, texts)):
             if embedding is not None:
                 video['embedding'] = embedding
-                video['full_text'] = combined_text
+                video['full_text'] = text
                 success_count += 1
             else:
                 fail_count += 1
                 logger.warning(f"Failed to create embedding for video: {video.get('video_id')}")
             
             results.append(video)
-            
-            # Log progress every 50 videos
-            if (i + 1) % 50 == 0:
-                logger.info(f"Progress: {i + 1}/{len(videos_data)} videos")
         
         logger.info(f"Embedding generation complete. Success: {success_count}, Failed: {fail_count}")
-        logger.info(f"Total tokens used: {self.total_tokens:,}")
-        logger.info(f"Estimated cost: ${self.total_tokens * 0.00002:.4f}")
         
         return results
     
@@ -210,7 +197,7 @@ class EmbeddingGenerator:
         """Lấy thống kê"""
         return {
             'total_requests': self.total_requests,
-            'total_tokens': self.total_tokens,
-            'estimated_cost': self.total_tokens * 0.00002,  # $0.02 per 1M tokens
-            'model': self.model
+            'total_tokens': 0,  # N/A for local models
+            'estimated_cost': 0.0,  # FREE!
+            'model': self.model_name
         }
