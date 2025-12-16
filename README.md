@@ -1,5 +1,6 @@
 # Set up venv
 python -m venv venv
+
 venv\Scripts\activate
 
  # 1. Setup REQUIREMENT
@@ -27,10 +28,9 @@ python scripts/search_videos.py  -q "video for preparing interview from file pdf
 
 #  File
 python scripts/search_videos.py -f “C:/paper.pdf” -o results.json
-#Text+Image
+# Text+Image
 python scripts/search_videos.py  -q "video for preparing interview from file pdf" -i "link image" -o results.json
 
 
 
-﻿# Computer-Vision_Recommendation_System
 
