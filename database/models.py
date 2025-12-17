@@ -191,3 +191,13 @@ def export_to_csv(output_file='data/exports/videos_export.csv'):
     except Exception as e:
         logger.error(f"Failed to export to CSV: {e}")
         return False
+    
+def update_video_transcript(video_id: str, transcript: str):
+    """Cập nhật transcript_text cho video_id"""
+    query = """
+        UPDATE videos
+        SET transcript_text = %s, updated_at = NOW()
+        WHERE video_id = %s;
+    """
+    execute_query(query, (transcript, video_id))
+    
