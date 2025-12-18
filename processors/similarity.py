@@ -122,10 +122,10 @@ class SimilarityCalculator:
             Final score
         """
         # Weights
-        SIMILARITY_WEIGHT = 0.70
-        POPULARITY_WEIGHT = 0.15
-        RECENCY_WEIGHT = 0.10
-        CHANNEL_WEIGHT = 0.05
+        SIMILARITY_WEIGHT = 0.80  # Tăng từ 0.70
+        POPULARITY_WEIGHT = 0.10  # Giảm từ 0.15
+        RECENCY_WEIGHT = 0.07     # Giảm từ 0.10
+        CHANNEL_WEIGHT = 0.03     # Giảm từ 0.05
         
         # Tính các component scores
         recency_score = self.calculate_recency_score(video.get('published_date'))

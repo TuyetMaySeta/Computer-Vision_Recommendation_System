@@ -11,23 +11,22 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# processors/embeddings.py
 class EmbeddingGenerator:
-    def __init__(self, model_name="all-MiniLM-L6-v2", batch_size=32):
+    def __init__(self, model_name="all-mpnet-base-v2", batch_size=32):
         """
-        Khởi tạo embedding generator với Sentence Transformers
+        UPGRADE: Sử dụng model tốt hơn
         
-        Args:
-            model_name: Model name (all-MiniLM-L6-v2 là nhẹ và nhanh)
-            batch_size: Số lượng text xử lý mỗi batch
+        Model options (theo thứ tự chất lượng):
+        1. "all-mpnet-base-v2" (768 dims) - TỐT NHẤT cho semantic search
+        2. "all-MiniLM-L12-v2" (384 dims) - Cân bằng speed/quality
+        3. "all-MiniLM-L6-v2" (384 dims) - Nhanh nhưng kém hơn
         """
         logger.info(f"Loading model: {model_name}...")
         self.model = SentenceTransformer(model_name)
         self.model_name = model_name
         self.batch_size = batch_size
-        self.dimension = 384  # all-MiniLM-L6-v2 outputs 384-dim vectors
-        
-        self.total_requests = 0
-        logger.info(f"Model loaded successfully! Embedding dimension: {self.dimension}")
+        self.dimension = self.model.get_sentence_embedding_dimension()
     
     def clean_text(self, text: str) -> str:
         """
@@ -54,18 +53,65 @@ class EmbeddingGenerator:
             text = text[:5000]
         
         return text
-    
-    def combine_video_text(self, video_data: Dict) -> str:
+    # processors/embeddings.py - ADVANCED VERSION
+    def chunk_transcript_semantic(self, transcript: str, max_chunk_size=512) -> list:
         """
-        Kết hợp title, description và transcript thành một văn bản
-        UPDATED: Ưu tiên title + description nếu không có transcript
+        Chia transcript thành chunks semantic (theo câu)
+        """
+        import re
         
-        Args:
-            video_data: Dictionary chứa thông tin video
+        # Split by sentences
+        sentences = re.split(r'[.!?]+', transcript)
+        
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
             
-        Returns:
-            Combined text
+            sentence_length = len(sentence.split())
+            
+            if current_length + sentence_length > max_chunk_size:
+                if current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_length = sentence_length
+            else:
+                current_chunk.append(sentence)
+                current_length += sentence_length
+        
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        
+        return chunks
+
+    def process_videos_with_chunking(self, videos_data: List[Dict]) -> List[Dict]:
         """
+        Process với chunking - tạo multiple embeddings per video
+        """
+        for video in videos_data:
+            transcript = video.get('transcript_text', '')
+            
+            if transcript and len(transcript) > 10000:
+                # Chunk transcript
+                chunks = self.chunk_transcript_semantic(transcript)
+                
+                # Create embedding for each chunk
+                chunk_embeddings = self.create_embeddings_batch(chunks)
+                
+                # Average pooling (hoặc max pooling)
+                video['embedding'] = np.mean(chunk_embeddings, axis=0)
+            else:
+                # Normal processing
+                text = self.combine_video_text(video)
+                video['embedding'] = self.create_embedding(text)
+        
+        return videos_data
+    def combine_video_text(self, video_data: Dict) -> str:
+        
         # Lấy các thành phần
         title = video_data.get('title', '')
         description = video_data.get('description', '')
@@ -73,39 +119,50 @@ class EmbeddingGenerator:
         tags = video_data.get('tags', [])
         channel_name = video_data.get('channel_name', '')
         
-        # Strategy: Title (×3) + Tags (×2) + Description (×2) + Transcript (×1)
         combined_parts = []
         
-        # Title là quan trọng nhất
+        # ===== THAY ĐỔI CHÍNH =====
+        
+        # 1. TRANSCRIPT là quan trọng NHẤT (×5) - TĂNG TỪ ×1
+        if transcript and len(transcript) >= 100:
+            # Thay vì cắt 2000 chars, sử dụng 5000-8000 chars
+            max_transcript_length = 8000  # Tăng từ 2000
+            
+            # Intelligent chunking: Lấy đều từ đầu, giữa, cuối
+            if len(transcript) > max_transcript_length:
+                chunk_size = max_transcript_length // 3
+                start = transcript[:chunk_size]
+                middle_start = len(transcript) // 2 - chunk_size // 2
+                middle = transcript[middle_start:middle_start + chunk_size]
+                end = transcript[-chunk_size:]
+                transcript_text = f"{start} {middle} {end}"
+            else:
+                transcript_text = transcript
+            
+            # Weight ×5 thay vì ×1
+            combined_parts.extend([transcript_text] * 5)
+        
+        # 2. Title (×3) - giữ nguyên
         if title:
             combined_parts.extend([title] * 3)
         
-        # Tags (nếu có)
-        if tags and isinstance(tags, list):
-            tags_text = ' '.join(tags[:10])  # Top 10 tags
-            combined_parts.extend([tags_text] * 2)
-        
-        # Description
+        # 3. Description (×2) - tăng limit
         if description:
-            # Lấy 1000 ký tự đầu của description
-            desc_text = description[:1000]
+            desc_text = description[:2000]  # Tăng từ 1000
             combined_parts.extend([desc_text] * 2)
         
-        # Channel name (để tăng relevance với channel chất lượng)
+        # 4. Tags (×2) - giữ nguyên
+        if tags and isinstance(tags, list):
+            tags_text = ' '.join(tags[:15])  # Tăng từ 10
+            combined_parts.extend([tags_text] * 2)
+        
+        # 5. Channel (×1)
         if channel_name:
             combined_parts.append(channel_name)
         
-        # Transcript (nếu có)
-        if transcript:
-            # Cắt transcript nếu quá dài
-            max_transcript_length = 2000
-            if len(transcript) > max_transcript_length:
-                transcript = transcript[:max_transcript_length]
-            combined_parts.append(transcript)
-        
-        # Nếu không có gì cả, ít nhất có title
-        if not combined_parts and title:
-            combined_parts = [title]
+        # Fallback nếu không có transcript
+        if not transcript and not combined_parts:
+            combined_parts = [title] * 5 if title else []
         
         combined = ' '.join(combined_parts)
         return self.clean_text(combined)
