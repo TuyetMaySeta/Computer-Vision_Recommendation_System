@@ -169,7 +169,8 @@ class InputProcessor:
         except Exception as e:
             logger.error(f"Error extracting Word text: {e}")
             return None, None
-    
+
+        
     def extract_structured_info(self, text: str) -> Dict:
         """
         Trích xuất thông tin có cấu trúc từ text (Abstract, Introduction, etc.)

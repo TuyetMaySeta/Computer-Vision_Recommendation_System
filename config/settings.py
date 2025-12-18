@@ -61,22 +61,48 @@ LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 LOG_FILE = os.getenv('LOG_FILE', 'data/logs/system.log')
 
 # Keywords for AI/ML content
+# DEFAULT_KEYWORDS = [
+#     "machine learning tutorial",
+#     "deep learning explained",
+#     "data science course",
+#     "neural networks tutorial",
+#     "AI fundamentals",
+#     "artificial intelligence course",
+#     "python machine learning",
+#     "tensorflow tutorial",
+#     "pytorch tutorial",
+#     "computer vision tutorial",
+#     "natural language processing",
+#     "reinforcement learning",
+#     "transformer architecture",
+#     "deep learning from scratch",
+#     "machine learning algorithms"
+# ]
+
 DEFAULT_KEYWORDS = [
-    "machine learning tutorial",
-    "deep learning explained",
-    "data science course",
-    "neural networks tutorial",
-    "AI fundamentals",
-    "artificial intelligence course",
-    "python machine learning",
-    "tensorflow tutorial",
-    "pytorch tutorial",
-    "computer vision tutorial",
-    "natural language processing",
-    "reinforcement learning",
-    "transformer architecture",
-    "deep learning from scratch",
-    "machine learning algorithms"
+    "convolutional neural network cnn tutorial",
+    "cnn image classification python",
+    "cnn object detection yolov8",
+    "cnn image segmentation u-net",
+    "cnn vs rnn vs transformer",
+
+    "large language model llm explained",
+    "llm architecture transformer decoder",
+    "fine tuning llm with huggingface",
+    "prompt engineering for llm",
+    "llm inference optimization",
+
+    "transformer attention mechanism explained",
+    "bert vs gpt architecture comparison",
+    "text embedding with transformer models",
+    "retrieval augmented generation rag",
+    "vector database for llm",
+
+    "self supervised learning in computer vision",
+    "multimodal ai vision language models",
+    "model quantization and pruning deep learning",
+    "distributed training deep learning pytorch",
+    "mlops deployment for deep learning models"
 ]
 
 # Quality channels for AI/ML content
