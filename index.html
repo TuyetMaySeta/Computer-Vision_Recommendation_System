@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Recommendation System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .file-upload-area {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .file-upload-area:hover {
+            border-color: #4299e1;
+            background-color: #ebf8ff;
+        }
+        .file-upload-area.has-file {
+            border-color: #48bb78;
+            background-color: #f0fff4;
+        }
+        .video-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .video-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"/>
+                    </svg>
+                    <div>
+                        <h1 class="text-2xl font-bold">YouTube Video Finder</h1>
+                        <p class="text-red-100 text-sm">AI-Powered Video Recommendation System</p>
+                    </div>
+                </div>
+                <div class="text-right text-sm text-red-100">
+                    <p>Powered by Machine Learning</p>
+                    <p>Semantic Search Engine</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Search Section -->
+        <div class="max-w-4xl mx-auto mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Find Your Perfect Video</h2>
+                
+                <!-- Text Query Input -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <svg class="inline w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        Search Query
+                    </label>
+                    <textarea 
+                        id="queryInput"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                        rows="3"
+                        placeholder="e.g., machine learning tutorial, transformer architecture, neural networks explained..."
+                    ></textarea>
+                </div>
+
+                <!-- PDF Upload Section -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <svg class="inline w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                        </svg>
+                        Document (PDF) 
+                    </label>
+                    <div class="file-upload-area rounded-lg p-4 text-center cursor-pointer" id="pdfUploadArea">
+                        <input type="file" id="pdfInput" accept=".pdf,.doc,.docx" class="hidden">
+                        <div id="uploadPrompt">
+                            <svg class="w-12 h-12 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                            <p class="text-sm text-gray-600 font-medium">Click or drag PDF file here</p>
+                            <p class="text-xs text-gray-400 mt-1">Max 50MB</p>
+                        </div>
+                        <div id="fileInfo" class="hidden">
+                            <svg class="w-12 h-12 mx-auto mb-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <p id="fileName" class="text-sm text-gray-700 font-medium mb-2"></p>
+                            <button id="removeFileBtn" class="inline-flex items-center px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition text-sm">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                Remove File
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top K Selection -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Number of Results: <span id="topKValue" class="text-red-600 font-semibold">5</span>
+                    </label>
+                    <input 
+                        type="range" 
+                        id="topKSlider" 
+                        min="1" 
+                        max="10" 
+                        value="5"
+                        class="w-full h-2 bg-gray-200 rounded-lg cursor-pointer accent-red-600"
+                    >
+                </div>
+
+                <!-- Search Button -->
+                <button 
+                    id="searchBtn"
+                    class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center space-x-2"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <span>Search Videos</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="hidden max-w-4xl mx-auto mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6 text-center">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-red-600 mb-4"></div>
+                <p class="text-gray-600">Analyzing and finding best matches...</p>
+                <p class="text-gray-500 text-sm mt-2">This may take a few seconds</p>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden max-w-6xl mx-auto">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">
+                    🎥 Top Recommended Videos
+                </h2>
+                <div id="metricsDisplay" class="text-sm text-gray-600">
+                    <!-- Metrics will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Results Grid -->
+            <div id="resultsGrid" class="grid md:grid-cols-2 gap-6">
+                <!-- Video cards will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="hidden max-w-4xl mx-auto">
+            <div class="bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-red-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div>
+                        <p class="text-red-700 font-medium" id="errorText">An error occurred</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-300 mt-16 py-6">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm">© 2025 YouTube Video Recommendation System</p>
+            <p class="text-xs mt-2">Built with Python, Sentence Transformers & Machine Learning</p>
+        </div>
+    </footer>
+
+    <script>
+        // File upload handlers
+        const pdfInput = document.getElementById('pdfInput');
+        const pdfUploadArea = document.getElementById('pdfUploadArea');
+        const uploadPrompt = document.getElementById('uploadPrompt');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const removeFileBtn = document.getElementById('removeFileBtn');
+
+        let currentFile = null;
+
+        pdfUploadArea.addEventListener('click', (e) => {
+            if (!e.target.closest('#removeFileBtn')) {
+                pdfInput.click();
+            }
+        });
+
+        pdfInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                currentFile = e.target.files[0];
+                showFileInfo(currentFile.name);
+            }
+        });
+
+        removeFileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearFile();
+        });
+
+        function showFileInfo(name) {
+            fileName.textContent = name;
+            uploadPrompt.classList.add('hidden');
+            fileInfo.classList.remove('hidden');
+            pdfUploadArea.classList.add('has-file');
+        }
+
+        function clearFile() {
+            currentFile = null;
+            pdfInput.value = '';
+            uploadPrompt.classList.remove('hidden');
+            fileInfo.classList.add('hidden');
+            pdfUploadArea.classList.remove('has-file');
+        }
+
+        // Top K slider
+        const topKSlider = document.getElementById('topKSlider');
+        const topKValue = document.getElementById('topKValue');
+        
+        topKSlider.addEventListener('input', (e) => {
+            topKValue.textContent = e.target.value;
+        });
+
+        // Search button handler
+        const searchBtn = document.getElementById('searchBtn');
+        const queryInput = document.getElementById('queryInput');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultsSection = document.getElementById('resultsSection');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const resultsGrid = document.getElementById('resultsGrid');
+        const metricsDisplay = document.getElementById('metricsDisplay');
+
+        searchBtn.addEventListener('click', async () => {
+            // Validate input
+            const query = queryInput.value.trim();
+            const pdfFile = pdfInput.files[0];
+
+            if (!query && !pdfFile) {
+                showError('Please provide at least one input: text query or document');
+                return;
+            }
+
+            // Hide error and results
+            errorMessage.classList.add('hidden');
+            resultsSection.classList.add('hidden');
+
+            // Show loading
+            loadingIndicator.classList.remove('hidden');
+            searchBtn.disabled = true;
+
+            try {
+                // Prepare form data
+                const formData = new FormData();
+                
+                if (query) {
+                    formData.append('query', query);
+                }
+                
+                if (pdfFile) {
+                    formData.append('pdf', pdfFile);
+                }
+                
+                formData.append('top_k', topKSlider.value);
+
+                // Call API
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Search failed');
+                }
+
+                const results = await response.json();
+
+                // Hide loading
+                loadingIndicator.classList.add('hidden');
+
+                // Display results
+                if (results && results.length > 0) {
+                    displayResults(results);
+                } else {
+                    showError('No matching videos found. Try different search terms.');
+                }
+
+            } catch (error) {
+                console.error('Search error:', error);
+                loadingIndicator.classList.add('hidden');
+                showError(error.message || 'An error occurred during search. Please try again.');
+            } finally {
+                searchBtn.disabled = false;
+            }
+        });
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.classList.remove('hidden');
+            setTimeout(() => errorMessage.classList.add('hidden'), 5000);
+        }
+
+        function displayResults(results) {
+            // Calculate metrics
+            const similarities = results.map(r => r.similarity_score);
+            const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+            const uniqueChannels = new Set(results.map(r => r.channel)).size;
+
+            // Display metrics
+            metricsDisplay.innerHTML = `
+                <div class="flex flex-wrap gap-4 text-sm">
+                    <div>📊 Average Similarity: <span class="font-semibold">${avgSimilarity.toFixed(3)}</span></div>
+                    <div>🌈 Diversity: <span class="font-semibold">${uniqueChannels}/${results.length} channels</span></div>
+                    <div>⭐ Quality Score: <span class="font-semibold">${(avgSimilarity * 100).toFixed(0)}/100</span></div>
+                </div>
+            `;
+
+            // Display video cards
+            resultsGrid.innerHTML = results.map(video => `
+                <div class="video-card bg-white rounded-lg shadow-md overflow-hidden">
+                    <div class="relative">
+                        <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-48 object-cover" onerror="this.src='https://via.placeholder.com/480x360?text=No+Thumbnail'">
+                        <div class="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded">
+                            ${video.duration || 'N/A'}
+                        </div>
+                        <div class="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">
+                            #${video.rank}
+                        </div>
+                    </div>
+                    <div class="p-4">
+                        <h3 class="font-semibold text-gray-800 mb-2 line-clamp-2 hover:text-red-600">
+                            <a href="${video.url}" target="_blank" rel="noopener noreferrer">${video.title}</a>
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-3">${video.channel}</p>
+                        <div class="flex items-center text-xs text-gray-500 space-x-3 mb-3">
+                            <span>👁️ ${video.view_count || 'N/A'}</span>
+                            <span>📅 ${video.published_date || 'N/A'}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs mb-3">
+                            <span class="bg-green-100 text-green-700 px-2 py-1 rounded">
+                                🎯 ${(video.similarity_score * 100).toFixed(1)}%
+                            </span>
+                            <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                ⭐ ${video.final_score.toFixed(3)}
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-600 italic mb-2">💡 ${video.why_relevant || 'Relevant to your query'}</p>
+                        <p class="text-xs text-gray-500 line-clamp-2">${video.summary || 'No summary available'}</p>
+                    </div>
+                </div>
+            `).join('');
+
+            resultsSection.classList.remove('hidden');
+            
+            // Scroll to results
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // Drag and drop support
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            pdfUploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            pdfUploadArea.addEventListener(eventName, () => {
+                pdfUploadArea.classList.add('border-red-500', 'bg-red-50');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            pdfUploadArea.addEventListener(eventName, () => {
+                pdfUploadArea.classList.remove('border-red-500', 'bg-red-50');
+            });
+        });
+
+        pdfUploadArea.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                pdfInput.files = files;
+                currentFile = files[0];
+                showFileInfo(currentFile.name);
+            }
+        });
+    </script>
+</body>
+</html>
